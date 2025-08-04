@@ -1,0 +1,50 @@
+alias: Solar CSV Export & DB Insert
+description: Exports solar data at high noon ± X hours, optionally writes to DB
+triggers:
+  - trigger: time
+    at: >-
+      {{ (utcnow().replace(hour=12, minute=0, second=0) +
+      timedelta(hours=8.25)).strftime('%H:%M:%S') }}
+    id: time
+  - trigger: time_pattern
+    minutes: /15
+    id: int15
+conditions: []
+actions:
+  - variables:
+      today: "{{ now().date().isoformat() }}"
+      export_args: "--day {{ today }} --insert-db --modules1 2 --azimuth1 190 --tilt1 15"
+  - choose:
+      - conditions:
+          - condition: trigger
+            id:
+              - time
+        sequence:
+          - action: shell_command.export_solar_logbook
+            data:
+              args: "{{ export_args }}"
+            response_variable: stout
+      - conditions:
+          - condition: trigger
+            id:
+              - int15
+          - condition: sun
+            after: sunrise
+            before: sunset
+        sequence:
+          - action: shell_command.export_solar_logbook
+            data:
+              args: "--day {{ today }} --insert-db"
+            response_variable: stout
+  - delay:
+      seconds: 2
+  - action: persistent_notification.create
+    data:
+      title: Solar Export for {{ today }}
+      notification_id: solar_export
+      message: |
+        ✅ Export completed for {{ today }}.
+        📁 File: `/config/share/solar_log_{{ today }}.csv`
+        🧭 Metadata: {{ export_args }}
+        📋 Status: {{ stout | default("No output received") }}
+mode: single
