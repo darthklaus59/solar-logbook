@@ -73,3 +73,9 @@ See `homeassistant/automation.yaml`
 - [RJ45 Modbus Resistor Installation Guide](docs/rj45_resistor_installation_en.md)
 - [Custom Sensor: Inverter Temperature Alt](docs/inverter_temperature_alt.md)
 
+## 📚 Documentation SolaX Mini
+
+- [Debugging custom sensor entities](docs/debugging_entities.md)
+- [Developer notes: custom sensors for SolaX Mini](docs/dev_notes_custom_sensors.md)
+- [Register map: SolaX X1 Mini inverter](docs/register_map_x1mini.md)
+
