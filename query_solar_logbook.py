@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # ---------------------------------------------
 # query_solar_logbook.py
-# Version      : 1.5.3
-# Last updated : 2025-08-03
+# Version      : 1.5.4
+# Last updated : 2025-08-07
 # Description  : Query solar_log_v2 sorted by timestamp
 #                and optionally interpolate and compute watt/klux
 # ---------------------------------------------
@@ -13,13 +13,21 @@ from tabulate import tabulate
 import os
 import csv
 from datetime import datetime, timedelta
+import configparser
 from interpolation_utils import interpolate_timeseries, add_watt_per_klux
+
+config = configparser.ConfigParser()
+config.read(os.path.join(os.path.dirname(__file__), "solar_logbook.conf"))
 
 # ---------------------------------------------
 # Argument parser
 # ---------------------------------------------
 parser = argparse.ArgumentParser(description="Query or clean the solar_log_v2 table.")
-parser.add_argument('--db-path', default='/config/solar_logbook.db', help='Path to the SQLite database')
+parser.add_argument(
+    '--db-path',
+    default=config.get("paths", "logbook_db_path", fallback="/config/solar_logbook.db"),
+    help='Path to the SQLite database'
+)
 parser.add_argument('--limit', type=int, default=10, help='Limit number of rows to display')
 parser.add_argument('--remove-duplicates', action='store_true', help='Remove duplicate entries by timestamp')
 parser.add_argument('--format', action='store_true', help='Pretty-print the result in table format')

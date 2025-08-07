@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # ---------------------------------------------
 # export_solar_logbook.py
-# Version       : 1.4.1
-# Last updated  : 2025-08-04
+# Version       : 1.4.2
+# Last updated  : 2025-08-07
 # Author        : KlausiPapa & ChatGPT
 # Description   : Solar data export from Home Assistant with optional DB insert
 # ---------------------------------------------
@@ -14,6 +14,12 @@ import argparse
 from datetime import timezone, datetime, timedelta
 import pytz
 from ha_location import read_ha_location_from_storage
+import configparser
+
+config = configparser.ConfigParser()
+config.read("solar_logbook.conf")
+
+default_delta_hours = config.getint("time", "delta_hours", fallback=7)
 
 # ---------------------------------------------
 # Argument parsing
@@ -32,7 +38,12 @@ parser.add_argument('--azimuth2', type=int, default=280, help="Azimuth angle (°
 parser.add_argument('--tilt2', type=int, default=60, help="Tilt angle (°) of modules string 2.")
 parser.add_argument('--batteries', type=int, default=0, help="Number of batteries.")
 parser.add_argument('--battery_cap', type=float, default=2.4, help="Total battery capacity in kWh.")
-parser.add_argument('--delta-hours', type=int, default=7, help="Half-width of window around high noon in hours.")
+parser.add_argument(
+    '--delta-hours',
+    type=int,
+    default=default_delta_hours,
+    help=f"Half-width of window around high noon in hours (default: {default_delta_hours})"
+)
 parser.add_argument('--solar-offset', nargs='?', const="", help=(
     "Solar correction in hours. If omitted, offset = 0. "
     "If passed without value, the value from Home Assistant location will be used. "
@@ -46,9 +57,9 @@ args = parser.parse_args()
 # ---------------------------------------------
 # Paths
 # ---------------------------------------------
-DB_PATH = "/config/home-assistant_v2.db"
-OUTPUT_CSV = f"/share/data/solar_log_{args.day}.csv"
-LOGBOOK_DB_PATH = "/config/solar_logbook.db"
+DB_PATH = config["paths"]["ha_db_path"]
+LOGBOOK_DB_PATH = config["paths"]["logbook_db_path"]
+OUTPUT_CSV = os.path.join(config["paths"]["output_dir"], f"solar_log_{args.day}.csv")
 
 # ---------------------------------------------
 # Time range: High Noon local ± delta-hours
