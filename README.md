@@ -43,6 +43,32 @@ the Python scripts).
 
 ### 📄 Example: `solar_logbook.conf`
 
+### 🔄 Update: `modules1` / `modules2` now represent installed power (Wp)
+
+> **Since version 1.4.4**, the fields `modules1` and `modules2` no longer refer to the number of panels, but instead to the **total installed power in Wp** (Watt-peak) for each module string.
+
+#### ✅ Example:
+
+```ini
+[system]
+modules1 = 760
+azimuth1 = 190
+tilt1 = 15
+
+modules2 = 0
+azimuth2 = 280
+tilt2 = 60
+
+batteries = 0
+battery_cap = 2.4
+```
+
+- These values can also be overridden via CLI using `--modules1`, `--modules2`, etc.
+- The **field names in the database and CSV stay the same**: `modules1`, `modules2`
+- If the config value is missing and no CLI override is provided, the field will remain **empty**
+
+
+
 ``` ini
 [paths]
 ha_db_path = /config/home-assistant_v2.db

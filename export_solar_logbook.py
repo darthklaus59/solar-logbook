@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ---------------------------------------------
 # export_solar_logbook.py
-# Version       : 1.4.2
+# Version       : 1.4.4
 # Last updated  : 2025-08-07
 # Author        : KlausiPapa & ChatGPT
 # Description   : Solar data export from Home Assistant with optional DB insert
@@ -14,15 +14,28 @@ import argparse
 from datetime import timezone, datetime, timedelta
 import pytz
 from ha_location import read_ha_location_from_storage
-import configparser
+from configparser import ConfigParser
 
-config = configparser.ConfigParser()
-config.read("solar_logbook.conf")
+# ---------------------------------------------
+# Load config values
+# ---------------------------------------------
+config = ConfigParser()
+config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "solar_logbook.conf")
+if not config.read(config_path):
+    raise FileNotFoundError(f"❌ Config file not found: {config_path}")
+
+def get_optional_int(section, key):
+    val = config.get(section, key, fallback=None)
+    return int(val) if val else None
+
+def get_optional_float(section, key):
+    val = config.get(section, key, fallback=None)
+    return float(val) if val else None
 
 default_delta_hours = config.getint("time", "delta_hours", fallback=7)
 
 # ---------------------------------------------
-# Argument parsing
+# Argument parser
 # ---------------------------------------------
 parser = argparse.ArgumentParser(
     description="Export solar data for a given day from Home Assistant DB into CSV and optionally into a local logbook DB."
@@ -30,29 +43,45 @@ parser = argparse.ArgumentParser(
 parser.add_argument('--day', help="Target date in format YYYY-MM-DD. Default is today.", default=datetime.now().date().isoformat())
 parser.add_argument('--insert-db', action='store_true', help="Insert result into local SQLite database 'solar_log_v2'.")
 parser.add_argument('--overwrite', action='store_true', help="Overwrite existing rows with the same timestamp in the DB.")
-parser.add_argument('--modules1', type=int, default=2, help="Number of modules (string 1).")
-parser.add_argument('--azimuth1', type=int, default=190, help="Azimuth angle (°) of modules string 1.")
-parser.add_argument('--tilt1', type=int, default=15, help="Tilt angle (°) of modules string 1.")
-parser.add_argument('--modules2', type=int, default=0, help="Number of modules (string 2).")
-parser.add_argument('--azimuth2', type=int, default=280, help="Azimuth angle (°) of modules string 2.")
-parser.add_argument('--tilt2', type=int, default=60, help="Tilt angle (°) of modules string 2.")
-parser.add_argument('--batteries', type=int, default=0, help="Number of batteries.")
-parser.add_argument('--battery_cap', type=float, default=2.4, help="Total battery capacity in kWh.")
+parser.add_argument('--verbose', action='store_true', help="Enable verbose debug output.")
+parser.add_argument('--test', action='store_true', help="Only show last timestamp in DB for the selected day.")
+
+# System config overrides
+parser.add_argument('--modules1', type=int, default=None, help="Wp of modules (string 1).")
+parser.add_argument('--azimuth1', type=int, default=None, help="Azimuth angle (deg) of modules string 1.")
+parser.add_argument('--tilt1', type=int, default=None, help="Tilt angle (deg) of modules string 1.")
+parser.add_argument('--modules2', type=int, default=None, help="Wp of modules (string 2).")
+parser.add_argument('--azimuth2', type=int, default=None, help="Azimuth angle (deg) of modules string 2.")
+parser.add_argument('--tilt2', type=int, default=None, help="Tilt angle (deg) of modules string 2.")
+parser.add_argument('--batteries', type=int, default=None, help="Number of batteries.")
+parser.add_argument('--battery_cap', type=float, default=None, help="Total battery capacity in kWh.")
+
 parser.add_argument(
     '--delta-hours',
     type=int,
-    default=default_delta_hours,
-    help=f"Half-width of window around high noon in hours (default: {default_delta_hours})"
+    default=None,
+    help=f"Half-width of window around high noon in hours (default from conf: {default_delta_hours})"
 )
 parser.add_argument('--solar-offset', nargs='?', const="", help=(
     "Solar correction in hours. If omitted, offset = 0. "
     "If passed without value, the value from Home Assistant location will be used. "
     "If passed with value, that will be used."
 ))
-parser.add_argument('--verbose', action='store_true', help="Enable verbose debug output.")
-parser.add_argument('--test', action='store_true', help="Only show last timestamp in DB for the selected day.")
 
 args = parser.parse_args()
+
+# ---------------------------------------------
+# Fill missing args with conf values
+# ---------------------------------------------
+args.modules1 = args.modules1 if args.modules1 is not None else get_optional_int("system", "modules1")
+args.azimuth1 = args.azimuth1 if args.azimuth1 is not None else get_optional_int("system", "azimuth1")
+args.tilt1 = args.tilt1 if args.tilt1 is not None else get_optional_int("system", "tilt1")
+args.modules2 = args.modules2 if args.modules2 is not None else get_optional_int("system", "modules2")
+args.azimuth2 = args.azimuth2 if args.azimuth2 is not None else get_optional_int("system", "azimuth2")
+args.tilt2 = args.tilt2 if args.tilt2 is not None else get_optional_int("system", "tilt2")
+args.batteries = args.batteries if args.batteries is not None else get_optional_int("system", "batteries")
+args.battery_cap = args.battery_cap if args.battery_cap is not None else get_optional_float("system", "battery_cap")
+args.delta_hours = args.delta_hours if args.delta_hours is not None else default_delta_hours
 
 # ---------------------------------------------
 # Paths

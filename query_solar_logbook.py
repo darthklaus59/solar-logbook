@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ---------------------------------------------
 # query_solar_logbook.py
-# Version      : 1.5.4
+# Version      : 1.5.5
 # Last updated : 2025-08-07
 # Description  : Query solar_log_v2 sorted by timestamp
 #                and optionally interpolate and compute watt/klux
@@ -13,11 +13,14 @@ from tabulate import tabulate
 import os
 import csv
 from datetime import datetime, timedelta
-import configparser
 from interpolation_utils import interpolate_timeseries, add_watt_per_klux
+from configparser import ConfigParser
 
-config = configparser.ConfigParser()
-config.read(os.path.join(os.path.dirname(__file__), "solar_logbook.conf"))
+config = ConfigParser()
+config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "solar_logbook.conf")
+if not config.read(config_path):
+    raise FileNotFoundError(f"❌ Config file not found: {config_path}")
+config.read(config_path)
 
 # ---------------------------------------------
 # Argument parser
