@@ -1,0 +1,20 @@
+# Treat Python files as UTF-8 text
+*.py text eol=lf
+
+# Treat config and YAML files as UTF-8 text
+*.conf text eol=lf
+*.yaml text eol=lf
+
+# Markdown documentation
+*.md text eol=lf
+
+# CSV and data files
+*.csv text eol=lf
+
+# Ignore Jupyter notebooks (falls du irgendwann welche hast)
+*.ipynb text
+
+# Explicitly mark binary files
+*.png binary
+*.jpg binary
+
