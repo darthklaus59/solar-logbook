@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # ---------------------------------------------
 # export_solar_logbook.py
-# Version       : 1.5.0
-# Last updated  : 2025-08-07
+# Version       : 1.5.4
+# Last updated  : 2025-08-31
 # Author        : KlausiPapa & ChatGPT
 # Description   : Solar data export from Home Assistant with optional DB insert
 # ---------------------------------------------
@@ -99,14 +99,12 @@ if location:
     print("  Timezone        :", location['time_zone'])
     print("  Solar offset    :", location['offset_hours'], "hours")
 
-# Base offset
 day_dt = datetime.strptime(args.day, "%Y-%m-%d")
 ntz_date = datetime(day_dt.year, 1, 1, 12, 0)
 local_tz = pytz.timezone(location['time_zone'])
 base_offset = local_tz.utcoffset(ntz_date).total_seconds() / 3600
 NTZ = timezone(timedelta(hours=base_offset))
 
-# Solar offset calculation
 if args.solar_offset is None:
     solar_offset = 0
 elif args.solar_offset == "":
@@ -118,7 +116,6 @@ else:
         print("⚠️ Invalid --solar-offset, fallback to 0")
         solar_offset = 0
 
-# Compute high noon in UTC
 local_noon = datetime(day_dt.year, day_dt.month, day_dt.day, 12, 0, tzinfo=NTZ)
 corrected_local_noon = local_noon - timedelta(hours=solar_offset)
 high_noon_utc = corrected_local_noon.astimezone(pytz.utc)
@@ -126,42 +123,10 @@ high_noon_utc = corrected_local_noon.astimezone(pytz.utc)
 start_utc = (high_noon_utc - timedelta(hours=args.delta_hours)).timestamp()
 end_utc = (high_noon_utc + timedelta(hours=args.delta_hours)).timestamp()
 
-if args.verbose:
-    print("delta", args.delta_hours, "NTZ", NTZ, "local_tz", local_tz, "pytz.utc", pytz.utc)
-    print("high_noon_utc", high_noon_utc)
-    print("start_utc", start_utc, "end_utc", end_utc)
-
 # ---------------------------------------------
-# Test mode: show last entry in DB
+# Entity definitions from conf
 # ---------------------------------------------
-if args.test:
-    print(f"🔎 Test mode for UTC window: {datetime.fromtimestamp(start_utc)} → {datetime.fromtimestamp(end_utc)}")
-    conn = sqlite3.connect(LOGBOOK_DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT MAX(timestamp) FROM solar_log_v2
-        WHERE timestamp BETWEEN ? AND ?
-    """, (datetime.utcfromtimestamp(start_utc).strftime("%Y-%m-%d %H:%M"),
-          datetime.utcfromtimestamp(end_utc).strftime("%Y-%m-%d %H:%M")))
-    result = cursor.fetchone()
-    conn.close()
-    if result and result[0]:
-        print(f"✅ Last entry on {args.day}: {result[0]}")
-    else:
-        print("⚠️ No entry found for selected day")
-    exit(0)
-
-# ---------------------------------------------
-# Entity definitions
-# ---------------------------------------------
-ENTITY_IDS = [
-    "sensor.esp8266_relay04_bh1750_illuminance",
-    "sensor.solaxmini_inverter_power",
-    "sensor.solax_ac_power",
-    "sensor.hybrid_inverter_power",
-    "sensor.power_load",
-    "sensor.battery_load"
-]
+ENTITY_IDS = [v for k, v in config["ha_sensors"].items()]
 
 # ---------------------------------------------
 # Read from Home Assistant database
@@ -175,6 +140,8 @@ for eid in ENTITY_IDS:
     result = cursor.fetchone()
     if result:
         entity_id_map[result[0]] = eid
+    else:
+        print(f"⚠️ Entity not found in states_meta: {eid}")
 
 metadata_ids = tuple(entity_id_map.keys())
 query = f"""
@@ -211,17 +178,26 @@ for meta_id, state, ts in data:
 rows = []
 for minute in sorted(temp_data.keys()):
     entry = temp_data[minute]
-    lux = entry.get("sensor.esp8266_relay04_bh1750_illuminance")
-    power1 = entry.get("sensor.solaxmini_inverter_power") or entry.get("sensor.solax_ac_power")
-    power2 = entry.get("sensor.hybrid_inverter_power")
-    power_load = entry.get("sensor.power_load")
-    battery_load = entry.get("sensor.battery_load")
+    lux = entry.get(config["ha_sensors"]["illuminance"])
+    power1 = entry.get(config["ha_sensors"]["inverter_power_solax"]) or entry.get(config["ha_sensors"]["inverter_power_mini"])
+    power2 = entry.get(config["ha_sensors"]["inverter_power_hybrid"])
+    grid_power = entry.get(config["ha_sensors"]["grid_power"])
+    grid_export = entry.get(config["ha_sensors"]["grid_export"])
+    grid_fossil_share = entry.get(config["ha_sensors"]["grid_fossil_share"])
+    total_power = entry.get(config["ha_sensors"]["total_power"])
+    power_load = entry.get(config["ha_sensors"]["power_load"])
+    battery_load = entry.get(config["ha_sensors"]["battery_load"])
+    solar_energy1 = entry.get(config["ha_sensors"]["solar_energy1"])
+    solar_energy2 = entry.get(config["ha_sensors"]["solar_energy2"])
+
     rows.append([
         minute, lux, power1, power2,
         args.modules1, args.azimuth1, args.tilt1,
         args.modules2, args.azimuth2, args.tilt2,
         args.batteries, args.battery_cap,
-        power_load, battery_load
+        grid_power, grid_export, grid_fossil_share, total_power,
+        power_load, battery_load,
+        solar_energy1, solar_energy2
     ])
 
 # ---------------------------------------------
@@ -235,7 +211,9 @@ with open(OUTPUT_CSV, mode="w", newline="") as f:
         "modules1", "azimuth1", "tilt1",
         "modules2", "azimuth2", "tilt2",
         "batteries", "battery_cap",
-        "power_load", "battery_load"
+        "grid_power", "grid_export", "grid_fossil_share", "total_power",
+        "power_load", "battery_load",
+        "solar_energy_string1", "solar_energy_string2"
     ])
     writer.writerows(rows)
 
@@ -272,8 +250,10 @@ if args.insert_db:
             modules1, azimuth1, tilt1,
             modules2, azimuth2, tilt2,
             batteries, battery_cap,
-            power_load, battery_load
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            grid_power, grid_export, grid_fossil_share, total_power,
+            power_load, battery_load,
+            solar_energy_string1, solar_energy_string2
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, row)
         insert_count += 1
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # ---------------------------------------------
 # query_solar_logbook.py
-# Version      : 1.5.5
-# Last updated : 2025-08-07
+# Version      : 1.5.6
+# Last updated : 2025-08-31
 # Description  : Query solar_log_v2 sorted by timestamp
 #                and optionally interpolate and compute watt/klux
 # ---------------------------------------------
@@ -16,11 +16,13 @@ from datetime import datetime, timedelta
 from interpolation_utils import interpolate_timeseries, add_watt_per_klux
 from configparser import ConfigParser
 
+# ---------------------------------------------
+# Load config
+# ---------------------------------------------
 config = ConfigParser()
 config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "solar_logbook.conf")
 if not config.read(config_path):
     raise FileNotFoundError(f"❌ Config file not found: {config_path}")
-config.read(config_path)
 
 # ---------------------------------------------
 # Argument parser
@@ -141,7 +143,9 @@ query = f"""
            modules1, azimuth1, tilt1,
            modules2, azimuth2, tilt2,
            batteries, battery_cap,
-           power_load, battery_load
+           power_load, battery_load,
+           grid_power, grid_export, grid_fossil_share, total_power,
+           solar_energy1, solar_energy2
     FROM solar_log_v2
     {where_sql}
     ORDER BY timestamp ASC
@@ -159,6 +163,8 @@ headers = ["timestamp", "lux", "power1", "power2",
            "modules2", "azimuth2", "tilt2",
            "batteries", "battery_cap",
            "power_load", "battery_load",
+           "grid_power", "grid_export", "grid_fossil_share", "total_power",
+           "solar_energy1", "solar_energy2",
            "watt_per_klux"]
 
 # ---------------------------------------------
