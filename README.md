@@ -1,75 +1,43 @@
-# 🌓 Solar Logbook for Home Assistant
+# Solar Logbook Tools
 
-Export and log your PV & Lux data for technical and legal analysis.
+Scripts to export, migrate, and query solar production and consumption data from a Home Assistant database into a local SQLite logbook. Provides CSV export, database storage, and advanced query functionality.
 
-## 📦 Features
+---
 
--   Minute-level export of solar production and illuminance
--   Automatic calculation of high-noon solar window (with solar
-    correction)
--   DB insert to a local SQLite logbook with smart overwrite
--   Lux-to-Power correlation with interpolation & metrics
--   Integration with Home Assistant (automation + shell_command)
--   Future-proof: supports hybrid inverter & battery expansion
+## Features
 
-## 🗂 Structure
+### Export Script (`export_solar_logbook.py`)
+- Extracts configured sensors from Home Assistant DB.
+- Aggregates data to **1-minute resolution**.
+- Writes results to:
+  - CSV file (`/share/data/solar_log_<date>.csv`)
+  - SQLite DB (`solar_log_v2`, optional `--insert-db`)
+- Handles:
+  - System metadata (modules, tilt, azimuth, batteries)
+  - Power & load sensors
+  - Integrated energy values
+- Configurable via `solar_logbook.conf`.
 
-  -------------------------------------------------------------------------------
-  File                                 Description
-  ------------------------------------ ------------------------------------------
-  `export_solar_logbook.py`            Exports solar data and inserts to DB
+### Query Script (`query_solar_logbook.py`)
+- Query stored data from `solar_log_v2`.
+- Options:
+  - Filter by date, range, or time-of-day.
+  - Interpolate missing values (`--interpolate`).
+  - Compute derived metrics (e.g. Watt/klux).
+  - Export results to CSV.
+  - Pretty table output with `--format`.
+- Ensures rows are sorted by timestamp.
 
-  `query_solar_logbook.py`             Query & filter solar logbook data
+### Migration Script (`migrate_solar_logbook.py`)
+- Updates `solar_log_v2` schema based on `solar_logbook.conf`.
+- Adds missing columns for newly configured sensors.
+- Ensures compatibility after config updates.
 
-  `interpolation_utils.py`             Interpolation + derived metrics
+---
 
-  `ha_location.py`                     Reads location info from HA `core.config`
-
-  `homeassistant/automation.yaml`      Scheduled export automation
-
-  `homeassistant/shell_command.yaml`   Shell command for HA
-
-  `solar_logbook.conf`                 Config paths and parameters
-  -------------------------------------------------------------------------------
-
-## 🔧 Configuration File: `solar_logbook.conf`
-
-As of version 1.5.x, the `solar_logbook.conf` file allows you to
-centrally configure important paths and parameters used by the
-`export_solar_logbook.py` and `query_solar_logbook.py` scripts.
-
-This file must be placed in the root directory of the project (alongside
-the Python scripts).
-
-### 📄 Example: `solar_logbook.conf`
-
-### 🔄 Update: `modules1` / `modules2` now represent installed power (Wp)
-
-> **Since version 1.4.4**, the fields `modules1` and `modules2` no longer refer to the number of panels, but instead to the **total installed power in Wp** (Watt-peak) for each module string.
-
-#### ✅ Example:
+## Configuration (`solar_logbook.conf`)
 
 ```ini
-[system]
-modules1 = 760
-azimuth1 = 190
-tilt1 = 15
-
-modules2 = 0
-azimuth2 = 280
-tilt2 = 60
-
-batteries = 0
-battery_cap = 2.4
-```
-
-- These values can also be overridden via CLI using `--modules1`, `--modules2`, etc.
-- The **field names in the database and CSV stay the same**: `modules1`, `modules2`
-- If the config value is missing and no CLI override is provided, the field will remain **empty**
-
-
-
-``` ini
 [paths]
 ha_db_path = /config/home-assistant_v2.db
 logbook_db_path = /config/solar_logbook.db
@@ -80,113 +48,91 @@ delta_hours = 7
 
 [logging]
 log_level = INFO
+
+[system]
+modules1 = 760
+azimuth1 = 190
+tilt1 = 15
+modules2 = 0
+azimuth2 = 280
+tilt2 = 60
+batteries = 0
+battery_cap = 2.4
+
+[ha_sensors]
+# Grid & Consumption
+grid_power = sensor.smart_meter_sum_active_instantaneous_power
+grid_export = sensor.smart_meter_active_power_export
+grid_fossil_share = sensor.grid_fossil_fuel_percentage
+total_power = sensor.sum_elec_power
+
+# Solar Production
+inverter_power_solax = sensor.solax_inverter_power
+inverter_power_mini = sensor.solax_ac_power
+inverter_power_hybrid = sensor.hybrid_inverter_power
+
+# Environmental
+illuminance = sensor.esp8266_relay04_bh1750_illuminance
+
+# Load & Battery
+power_load = sensor.power_load
+battery_load = sensor.battery_load
+
+# Integrated Energy Sensors (kWh)
+solar_energy1 = sensor.280_60_solar_energy
+solar_energy2 = sensor.280_15_solar_energy
 ```
 
-### 📌 Sections and Parameters
+---
 
-  -----------------------------------------------------------------------------
-  Section              Key                           Description
-  -------------------- ----------------------------- --------------------------
-  `paths`              `ha_db_path`                  Path to the Home Assistant
-                                                     SQLite database
-                                                     (`home-assistant_v2.db`)
+## CSV & Database Columns
 
-                       `logbook_db_path`             Path to the local solar
-                                                     logbook database
-                                                     (`solar_logbook.db`)
+Each row contains:
 
-                       `output_dir`                  Folder where export CSV
-                                                     files will be stored
-
-  `time`               `delta_hours`                 Width of the time window
-                                                     (in hours) around local
-                                                     noon for data
-                                                     export/interpolation
-
-  `logging`            `log_level`                   Optional logging level
-                                                     (e.g., `INFO`, `DEBUG`,
-                                                     etc.)
-  -----------------------------------------------------------------------------
-
-### 🤔 Behavior
-
--   If a script argument like `--db-path` or `--delta-hours` is **not
-    provided**, the value from `solar_logbook.conf` will be used as
-    default.
--   Command-line arguments always **override** the configuration file.
--   If `solar_logbook.conf` is missing or incomplete, **hardcoded
-    fallback values** will be used.
-
-### 📂 File location
-
-Make sure `solar_logbook.conf` is located in the same directory as the
-main scripts:
-
-    solar-logbook/
-    ├── export_solar_logbook.py
-    ├── query_solar_logbook.py
-    ├── solar_logbook.conf       ← here
-    ...
-
-## 💻 CLI Usage
-
-``` bash
-./export_solar_logbook.py --day 2025-08-01 --insert-db
-./query_solar_logbook.py --from 2025-08-01 --l 1500 --int
+```
+timestamp, lux, power1, power2,
+modules1, azimuth1, tilt1,
+modules2, azimuth2, tilt2,
+batteries, battery_cap,
+power_load, battery_load,
+grid_power, grid_export, grid_fossil_share, total_power,
+solar_energy1, solar_energy2
 ```
 
-## \# Solar Log Export Tool
+- **timestamp** → 1-minute resolution
+- **lux** → Illumination (klux)
+- **power1/power2** → Inverter power (main + hybrid)
+- **solar_energy1/2** → Integrated kWh values from string-specific sensors
 
-This script exports solar production data from the Home Assistant SQLite
-database. It generates a CSV file and optionally inserts the data into a
-local solar logbook database.
+---
 
 ## Usage
 
-``` bash
-python3 export_solar_logbook.py --day YYYY-MM-DD [--insert-db] [--modules1 N] [--azimuth1 DEG] [--tilt1 DEG]
-                                 [--modules2 N] [--azimuth2 DEG] [--tilt2 DEG] [--batteries N] [--battery_cap kWh]
-                                 [--delta-hours N]
+### Export daily data
+```bash
+./export_solar_logbook.py --day 2025-08-30 --insert-db --overwrite
 ```
 
-### Examples
-
-``` bash
-python3 export_solar_logbook.py --day 2025-07-31 --insert-db --modules1 2 --azimuth1 190 --tilt1 15
+### Query with interpolation
+```bash
+./query_solar_logbook.py --from-day 2025-08-01 --to-day 2025-08-31 --interpolate --format
 ```
 
-## Output
+### Remove duplicate rows
+```bash
+./query_solar_logbook.py --remove-duplicates
+```
 
--   CSV file at `/share/data/solar_log_YYYY-MM-DD.csv`
--   Optional database entries into `/config/solar_logbook.db`
+### Migrate DB schema after config change
+```bash
+./migrate_solar_logbook.py
+```
 
-## CSV Fields
+---
 
--   timestamp
--   lux
--   power1
--   power2
--   modules1, azimuth1, tilt1
--   modules2, azimuth2, tilt2
--   batteries, battery_cap
--   power_load, battery_load
+## Notes
+- All scripts require **Python 3.9+**.
+- DB schema evolves with config – run migration after changing sensors.
+- Export and query scripts are versioned (`v1.5.x`).
+- Data stays accessible for **long-term comparisons** (e.g., monthly/annual production).
 
-## 🏡 Home Assistant Integration
-
-See `homeassistant/automation.yaml`
-
-------------------------------------------------------------------------
-
-## 📚 Documentation
-
--   [RJ45 Modbus Resistor Installation
-    Guide](docs/rj45_resistor_installation_en.md)
--   [Custom Sensor: Inverter Temperature
-    Alt](docs/inverter_temperature_alt.md)
-
-## 📚 Documentation SolaX Mini
-
--   [Debugging custom sensor entities](docs/debugging_entities.md)
--   [Developer notes: custom sensors for SolaX
-    Mini](docs/dev_notes_custom_sensors.md)
--   [Register map: SolaX X1 Mini inverter](docs/register_map_x1mini.md)

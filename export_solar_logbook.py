@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ---------------------------------------------
 # export_solar_logbook.py
-# Version       : 1.4.4
+# Version       : 1.5.0
 # Last updated  : 2025-08-07
 # Author        : KlausiPapa & ChatGPT
 # Description   : Solar data export from Home Assistant with optional DB insert
